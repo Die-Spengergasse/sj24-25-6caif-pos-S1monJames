@@ -10,8 +10,8 @@ using SPG_Fachtheorie.Aufgabe3.Dtos;
 
 namespace SPG_Fachtheorie.Aufgabe3.Controllers
 {
-    [Route("api/[controller]")]  // [controller] bedeutet: das Wort vor Controller
-    [ApiController]              // Soll von ASP gemappt werden
+    [Route("api/[controller]")]
+    [ApiController]
     public class EmployeesController : ControllerBase
     {
         private readonly AppointmentContext _db;
@@ -21,12 +21,6 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             _db = db;
         }
 
-        /// <summary>
-        /// GET /api/employees oder             --> type = null
-        /// GET /api/employees?type=Manager     --> type = Manager
-        /// GET /api/employees?type=manager     --> type = manager
-        /// GET /api/employees?type=            --> type = ""
-        /// </summary>
         [HttpGet]
         public ActionResult<List<EmployeeDto>> GetAllEmployees([FromQuery] string? type)
         {
@@ -36,13 +30,10 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
                 .Select(e => new EmployeeDto(
                     e.RegistrationNumber, e.FirstName, e.LastName,
                     $"{e.FirstName} {e.LastName}", e.Type))
-                .ToList();    //  // [{...}, {...}, ... ]
+                .ToList();
             return Ok(employees);
         }
 
-        /// <summary>
-        /// GET /api/employee/1001
-        /// </summary>
         [HttpGet("{registrationNumber}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -56,13 +47,11 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
                     $"{e.FirstName} {e.LastName}",
                     e.Address, e.Type))
                 .AsNoTracking()
-                .FirstOrDefault();  // { .... }
+                .FirstOrDefault();
             if (employees is null) { return NotFound(); }
             return Ok(employees);
         }
 
-        ///
-        /// POST /api/employee/manager
         [HttpPost("manager")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -79,14 +68,11 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             }
             catch (DbUpdateException e)
             {
-                // 400 Bad request: clientdaten fehlerhaft, der client soll die Daten nicht erneut senden.
                 return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
             }
-            // Den primary key des neuen DB Objektes zurückgeben.
             return CreatedAtAction(nameof(AddManager), new { manager.RegistrationNumber });
         }
 
-        /// POST /api/employee/cashier
         [HttpPost("cashier")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -103,10 +89,8 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             }
             catch (DbUpdateException e)
             {
-                // 400 Bad request: clientdaten fehlerhaft, der client soll die Daten nicht erneut senden.
                 return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
             }
-            // Den primary key des neuen DB Objektes zurückgeben.
             return CreatedAtAction(nameof(AddManager), new { cashier.RegistrationNumber });
         }
 
@@ -140,10 +124,6 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             }
             return NoContent();
         }
-
-        /// <summary>
-        /// PUT /api/manager/{registrationNumber}
-        /// </summary>
 
         [HttpPut("/api/manager/{registrationNumber}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -181,10 +161,6 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             return NoContent();
         }
 
-
-        /// <summary>
-        /// PATCH /api/employees/{registrationNumber}/address
-        /// </summary>
         [HttpPatch("{registrationNumber}/address")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
