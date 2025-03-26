@@ -21,5 +21,6 @@ namespace SPG_Fachtheorie.Aufgabe1.Model
         public int Amount { get; set; }
         public decimal Price { get; set; }
         public Payment Payment { get; set; }
+	public DateTime? LastUpdated { get; set; } = null;
     }
 }

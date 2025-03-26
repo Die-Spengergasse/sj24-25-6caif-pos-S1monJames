@@ -17,6 +17,7 @@ namespace SPG_Fachtheorie.Aufgabe1.Model
         }
 
         public int Id { get; set; }
+	public DateTime? Confirmed { get; set; } = null;
         public CashDesk CashDesk { get; set; }
         public DateTime PaymentDateTime { get; set; }
         public Employee Employee { get; set; }
