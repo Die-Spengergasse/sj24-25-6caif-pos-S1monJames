@@ -3,43 +3,54 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Any;
+using SPG_Fachtheorie.Aufgabe1.Commands;
 using SPG_Fachtheorie.Aufgabe1.Infrastructure;
 using SPG_Fachtheorie.Aufgabe1.Model;
+using SPG_Fachtheorie.Aufgabe1.Services;
 using SPG_Fachtheorie.Aufgabe3.Commands;
 using SPG_Fachtheorie.Aufgabe3.Dtos;
 
 namespace SPG_Fachtheorie.Aufgabe3.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
+    [Route("api/[controller]")]  // [controller] bedeutet: das Wort vor Controller
+    [ApiController]              // Soll von ASP gemappt werden
     public class EmployeesController : ControllerBase
     {
-        private readonly AppointmentContext _db;
+        private readonly EmployeeService _service;
 
-        public EmployeesController(AppointmentContext db)
+        public EmployeesController(EmployeeService service)
         {
-            _db = db;
+            _service = service;
         }
 
+        /// <summary>
+        /// GET /api/employees oder             --> type = null
+        /// GET /api/employees?type=Manager     --> type = Manager
+        /// GET /api/employees?type=manager     --> type = manager
+        /// GET /api/employees?type=            --> type = ""
+        /// </summary>
         [HttpGet]
         public ActionResult<List<EmployeeDto>> GetAllEmployees([FromQuery] string? type)
         {
-            var employees = _db.Employees
+            var employees = _service.Employees
                 .Where(e => string.IsNullOrEmpty(type)
                     ? true : e.Type.ToLower() == type.ToLower())
                 .Select(e => new EmployeeDto(
                     e.RegistrationNumber, e.FirstName, e.LastName,
                     $"{e.FirstName} {e.LastName}", e.Type))
-                .ToList();
+                .ToList();    //  // [{...}, {...}, ... ]
             return Ok(employees);
         }
 
+        /// <summary>
+        /// GET /api/employee/1001
+        /// </summary>
         [HttpGet("{registrationNumber}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public ActionResult<EmployeeDetailDto> GetEmployee(int registrationNumber)
         {
-            var employees = _db.Employees
+            var employees = _service.Employees
                 .Where(e => e.RegistrationNumber == registrationNumber)
                 .Select(e => new EmployeeDetailDto(
                     e.RegistrationNumber,
@@ -47,83 +58,56 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
                     $"{e.FirstName} {e.LastName}",
                     e.Address, e.Type))
                 .AsNoTracking()
-                .FirstOrDefault();
+                .FirstOrDefault();  // { .... }
             if (employees is null) { return NotFound(); }
             return Ok(employees);
         }
 
+        ///
+        /// POST /api/employee/manager
         [HttpPost("manager")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public IActionResult AddManager(NewManagerCommand cmd)
         {
-            var manager = new Manager(
-                cmd.RegistrationNumber, cmd.FirstName, cmd.LastName,
-                cmd.Address is null ? null : new Address(cmd.Address.Street, cmd.Address.Zip, cmd.Address.City),
-                cmd.CarType);
-            _db.Managers.Add(manager);
             try
             {
-                _db.SaveChanges();
+                var manager = _service.AddManager(cmd);
+                return CreatedAtAction(nameof(AddManager), new { manager.RegistrationNumber });
             }
-            catch (DbUpdateException e)
+            catch (EmployeeServiceException e)
             {
-                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+                return Problem(e.Message, statusCode: 400);
             }
-            return CreatedAtAction(nameof(AddManager), new { manager.RegistrationNumber });
         }
 
+        /// POST /api/employee/cashier
         [HttpPost("cashier")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public IActionResult AddCashier(NewCashierCommand cmd)
         {
-            var cashier = new Cashier(
-                cmd.RegistrationNumber, cmd.FirstName, cmd.LastName,
-                cmd.Address is null ? null : new Address(cmd.Address.Street, cmd.Address.Zip, cmd.Address.City),
-                cmd.JobSpezialisation);
-            _db.Cashiers.Add(cashier);
             try
             {
-                _db.SaveChanges();
+                var cashier = _service.AddCashier(cmd);
+                return CreatedAtAction(nameof(AddCashier), new { cashier.RegistrationNumber });
             }
-            catch (DbUpdateException e)
+            catch (EmployeeServiceException e)
             {
-                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+                return Problem(e.Message, statusCode: 400);
             }
-            return CreatedAtAction(nameof(AddManager), new { cashier.RegistrationNumber });
         }
 
         [HttpDelete("{registrationNumber}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteEmployee(int registrationNumber)
-        {
-            var paymentItems = _db.PaymentItems
-                .Where(p => p.Payment.Employee.RegistrationNumber == registrationNumber)
-                .ToList();
-            var payments = _db.Payments
-                .Where(p => p.Employee.RegistrationNumber == registrationNumber)
-                .ToList();
+        public IActionResult DeleteEmployee(int registrationNumber) =>
+            CallServiceMethod(() => _service.DeleteEmployee(registrationNumber), NoContent());
 
-            var employee = _db.Employees
-                .FirstOrDefault(e => e.RegistrationNumber == registrationNumber);
-            if (employee is null) return NoContent();
-            try
-            {
-                _db.PaymentItems.RemoveRange(paymentItems);
-                _db.SaveChanges();
-                _db.Payments.RemoveRange(payments);
-                _db.SaveChanges();
-                _db.Employees.Remove(employee);
-                _db.SaveChanges();
-            }
-            catch (DbUpdateException e)
-            {
-                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
-            }
-            return NoContent();
-        }
+
+        /// <summary>
+        /// PUT /api/manager/{registrationNumber}
+        /// </summary>
 
         [HttpPut("/api/manager/{registrationNumber}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -134,56 +118,35 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
         {
             if (registrationNumber != cmd.RegistrationNumber)
                 return Problem("Invalid registration number", statusCode: 400);
-            var manager = _db.Managers
-                .FirstOrDefault(m => m.RegistrationNumber == registrationNumber);
-            if (manager is null)
-                return Problem("Manager not found.", statusCode: 404);
-            if (manager.LastUpdate != cmd.LastUpdate)
-                return Problem("Manager has changed.", statusCode: 400);
-            manager.FirstName = cmd.FirstName;
-            manager.LastName = cmd.LastName;
-
-            manager.Address = cmd.Address is not null
-                ? new Address(cmd.Address.Street, cmd.Address.Zip, cmd.Address.City)
-                : null;
-
-            manager.CarType = cmd.CarType;
-            manager.LastUpdate = DateTime.UtcNow;
-            try
-            {
-                _db.SaveChanges();
-            }
-            catch (DbUpdateException e)
-            {
-                return Problem(
-                    e.InnerException?.Message ?? e.Message, statusCode: 400);
-            }
-            return NoContent();
+            return CallServiceMethod(() => _service.UpdateManager(cmd), NoContent());
         }
 
+        /// <summary>
+        /// PATCH /api/employees/{registrationNumber}/address
+        /// </summary>
         [HttpPatch("{registrationNumber}/address")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public IActionResult UpdateAddress(
-            int registrationNumber, [FromBody] UpdateAddressCommand cmd)
-        {
-            var employee = _db.Employees
-                .FirstOrDefault(e => e.RegistrationNumber == registrationNumber);
-            if (employee is null)
-                return Problem("Employee not found", statusCode: 404);
+            int registrationNumber, [FromBody] UpdateAddressCommand cmd) =>
+            CallServiceMethod(() => _service.UpdateAddress(registrationNumber, cmd), NoContent());
 
-            employee.Address = new Address(
-                cmd.Street, cmd.Zip, cmd.City);
+        private IActionResult CallServiceMethod(Action action, IActionResult successResult)
+        {
             try
             {
-                _db.SaveChanges();
+                action();
+                return successResult;
             }
-            catch (DbUpdateException e)
+            catch (EmployeeServiceException e) when (e.IsNotFoundError == true)
             {
-                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+                return Problem(e.Message, statusCode: 404);
             }
-            return NoContent();
+            catch (EmployeeServiceException e)
+            {
+                return Problem(e.Message, statusCode: 400);
+            }
         }
     }
 }
